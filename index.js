@@ -1,3 +1,8 @@
+const http = require('http');
+http.createServer((req,res)=>{
+res.writeHead(200);
+res.end('11X-BOT ACTIVO');
+}).listen(process.env.PORT || 3000,()=>{console.log('Puerto abierto')});
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const P = require('pino');
 const qrcode = require('qrcode-terminal');
