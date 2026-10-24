@@ -9,43 +9,68 @@ const PORT = process.env.PORT || 10000
 
 app.get('/', (req,res)=>{
   res.send(`
-  <html><body style="font-family:sans-serif;text-align:center;margin-top:30px">
+  <html><body style="text-align:center;font-family:sans-serif;margin-top:40px">
   <h1>11X-BOT GENERADOR</h1>
-  <p>Generar con CODE</p>
   <form action="/code">
-  <input name="number" placeholder="519XXXXXXXX" style="padding:10px;width:200px" />
+  <input name="number" placeholder="519XXXXXXXX" style="padding:12px;width:220px;font-size:18px" required>
   <br><br>
-  <button style="padding:10px 20px">GENERAR CODE</button>
+  <button style="padding:12px 25px;background:black;color:white;font-size:16px">GENERAR CODE - 2 MIN</button>
   </form>
-  <br><hr><br>
-  <a href="/qr" style="padding:15px 25px;background:black;color:white;text-decoration:none">GENERAR CON QR</a>
-  </body></html>
-  `)
+  <br><br><hr><br>
+  <a href="/qr" style="padding:12px 25px;background:green;color:white;text-decoration:none">GENERAR CON QR</a>
+  </body></html>`)
 })
 
 app.get('/code', async (req,res)=>{
   let num = req.query.number?.replace(/[^0-9]/g,'')
-  if(!num) return res.send('Pon tu numero')
+  if(!num) return res.send('Falta numero')
   if(fs.existsSync('./auth')) fs.rmSync('./auth',{recursive:true,force:true})
-  const { state } = await useMultiFileAuthState('./auth')
-  const sock = makeWASocket({ auth: state, logger: pino({level:'silent'}), browser:['11X-BOT','Chrome','1.0'] })
+
+  const { state, saveCreds } = await useMultiFileAuthState('./auth')
+  const sock = makeWASocket({ 
+    auth: state, 
+    logger: pino({level:'silent'}), 
+    browser:['11X-BOT','Chrome','1.0'] 
+  })
+  sock.ev.on('creds.update', saveCreds)
+  
   await new Promise(r=>setTimeout(r,3000))
+  
   try{
     let code = await sock.requestPairingCode(num)
-    res.send(`<h1 style="text-align:center;margin-top:50px">TU CODE: ${code}<br><br><small>Ponlo en WhatsApp en menos de 15 seg!</small><br><br><a href="/">Volver</a></h1>`)
-  }catch(e){ res.send('Error: '+e.message+'<br><a href="/">Volver</a>') }
+    
+    res.send(`
+    <div style="text-align:center;font-family:sans-serif;margin-top:50px">
+      <h2>TU CODE:</h2>
+      <h1 style="font-size:50px;letter-spacing:10px;background:black;color:white;display:inline-block;padding:15px 30px">${code}</h1>
+      <br><br>
+      <h3 style="color:green">MISMO CODE VALIDO POR 2 MINUTOS</h3>
+      <p>WhatsApp > Dispositivos vinculados > Vincular con número</p>
+      <p>El vigilante se queda 2 minutos en la puerta</p>
+    </div>`)
+
+    // CLAVE DE LOS 2 MINUTOS - MISMO CODE
+    setTimeout(()=>{
+      try{ sock.end() }catch{}
+      try{ fs.rmSync('./auth',{recursive:true,force:true}) }catch{}
+    }, 120000)
+
+  }catch(e){
+    res.send('Error: '+e.message)
+  }
 })
 
 app.get('/qr', async (req,res)=>{
   if(fs.existsSync('./auth')) fs.rmSync('./auth',{recursive:true,force:true})
-  const { state } = await useMultiFileAuthState('./auth')
+  const { state, saveCreds } = await useMultiFileAuthState('./auth')
   const sock = makeWASocket({ auth: state, logger: pino({level:'silent'}), browser:['11X-BOT','Chrome','1.0'] })
+  sock.ev.on('creds.update', saveCreds)
   sock.ev.on('connection.update', async (u)=>{
     if(u.qr){
-      let qrimg = await QRCode.toDataURL(u.qr)
-      res.send(`<div style="text-align:center;margin-top:20px"><h1>ESCANEA ESTE QR</h1><img src="${qrimg}" style="width:300px"><br><p>WhatsApp > Dispositivos vinculados > Vincular dispositivo</p><p>El QR dura 30 segundos, recarga si expira</p></div>`)
+      let qr = await QRCode.toDataURL(u.qr)
+      if(!res.headersSent) res.send(`<div style="text-align:center"><h1>ESCANEA - 2 MIN</h1><img src="${qr}" width="350"></div>`)
     }
   })
 })
 
-app.listen(PORT, ()=> console.log('WEB EN: '+PORT))      
+app.listen(PORT, ()=> console.log('ON '+PORT))   
