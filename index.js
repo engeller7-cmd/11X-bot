@@ -1,60 +1,43 @@
-const http = require('http');
-http.createServer((req,res)=>{
-  res.writeHead(200);
-  res.end('11X-BOT ACTIVO');
-}).listen(process.env.PORT || 3000,()=>console.log('Web activa'));
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
+const P = require('pino')
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const P = require('pino');
+async function start() {
+    const { state, saveCreds } = await useMultiFileAuthState('./auth_info')
+    const sock = makeWASocket({
+        auth: state,
+        logger: P({ level: 'silent' }),
+        printQRInTerminal: false,
+        browser: ['11X-BOT', 'Chrome', '1.0']
+    })
 
-let codeSolicitado = false;
+    sock.ev.on('creds.update', saveCreds)
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-  const sock = makeWASocket({
-    auth: state,
-    logger: P({level:'silent'}),
-    printQRInTerminal: false,
-    browser: ['11X-BOT', 'Chrome', '1.0']
-  });
-
-  // SOLO PIDE 1 VEZ EL CODE
-  if (!sock.authState.creds.registered && !codeSolicitado) {
-    codeSolicitado = true;
-    const num = (process.env.PHONE_NUMBER || "51938287313").replace(/[^0-9]/g,'');
-    console.log(`Esperando 5 seg para pedir CODE a ${num}...`);
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(num);
-        console.log(`
-
-  TU UNICO CODE ES: ${code}
-  Tienes 60 segundos para vincularlo
-  WhatsApp > Dispositivos vinculados
-
-
-`);
-      } catch (e) {
-        console.log("Error pidiendo code, reintenta Manual Deploy:", e.message);
-        codeSolicitado = false;
-      }
-    }, 5000);
-  }
-
-  sock.ev.on('creds.update', saveCreds);
-  
-  sock.ev.on('connection.update', async (u) => {
-    const { connection, lastDisconnect } = u;
-    if (connection === 'open') {
-      console.log('✅ 11X-BOT CONECTADO YA NO NECESITAS CODE');
+    if (!sock.authState.creds.registered) {
+        let phone = process.env.PHONE_NUMBER || '51938287313'
+        phone = phone.replace(/[^0-9]/g, '')
+        await new Promise(r => setTimeout(r, 5000))
+        try {
+            let code = await sock.requestPairingCode(phone)
+            code = code?.match(/.{1,4}/g)?.join('-') || code
+            console.log('====================================')
+            console.log(`TU UNICO CODE ES: ${code}`)
+            console.log(`ESTE ES TU UNICO CODE, NO HABRA OTRO`)
+            console.log(`Tienes 60 segundos para ponerlo!`)
+            console.log('====================================')
+        } catch (e) {
+            console.log('Error pidiendo CODE:', e.message)
+        }
     }
-    if (connection === 'close') {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        console.log('Desconectado, reconectando en 5 seg...');
-        setTimeout(startBot, 5000);
-      }
-    }
-  });
+
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect } = update
+        if (connection === 'open') {
+            console.log('CONECTADO! BOT 11X ONLINE')
+        }
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+            if (shouldReconnect) start()
+        }
+    })
 }
-startBot();
+start()
