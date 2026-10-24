@@ -1,6 +1,7 @@
 const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys')
 const express = require('express')
 const pino = require('pino')
+const fs = require('fs')
 
 const app = express()
 const PORT = process.env.PORT || 10000
@@ -21,6 +22,7 @@ app.get('/', (req,res)=>{
 
 app.get('/code', async (req,res)=>{
   let num = req.query.number.replace(/[^0-9]/g,'')
+  if(fs.existsSync('./auth')) fs.rmSync('./auth',{recursive:true,force:true})
   const { state } = await useMultiFileAuthState('./auth')
   const sock = makeWASocket({ 
     auth: state, 
@@ -30,8 +32,8 @@ app.get('/code', async (req,res)=>{
   await new Promise(r=>setTimeout(r,3000))
   try{
     let code = await sock.requestPairingCode(num)
-    res.send(`<h1 style="text-align:center;margin-top:100px">TU CODE: ${code}<br><br><small>Ve a WhatsApp > Dispositivos vinculados > Vincular con numero</small></h1>`)
+    res.send(`<h1 style="text-align:center;margin-top:100px">TU CODE: ${code}<br><br><small>Tienes 20 SEGUNDOS para ponerlo en WhatsApp!</small></h1>`)
   }catch(e){ res.send('Error: '+e.message) }
 })
 
-app.listen(PORT, ()=> console.log('WEB EN: '+PORT))         
+app.listen(PORT, ()=> console.log('WEB EN: '+PORT))       
